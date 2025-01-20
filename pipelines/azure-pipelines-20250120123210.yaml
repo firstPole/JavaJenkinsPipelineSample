@@ -1,0 +1,92 @@
+To set up an Azure DevOps pipeline that executes Terraform code upon the approval of a Pull Request (PR), follow the detailed steps and prerequisites outlined below. This pipeline includes best practices for security, such as using service connections for Azure authentication and enabling Terraform validation.
+
+### Prerequisites
+
+1. **Azure DevOps Organization**: You need an Azure DevOps account and a project set up.
+2. **Service Connection**: Create a service connection in Azure DevOps for Azure to allow the pipeline to deploy resources.
+   - Go to Project Settings > Service connections > New service connection > Azure Resource Manager.
+   - Use an existing service principal or create a new one.
+   - Grant the necessary permissions to the service principal in your Azure subscription.
+3. **Terraform Installed**: Ensure that Terraform is installed in the environment where the pipeline will run (you might use a Docker image with Terraform or use the Azure DevOps Terraform task).
+4. **Repository Structure**: Ensure your repository contains the Terraform code structured properly (e.g., main.tf, variables.tf, etc.).
+
+### Azure DevOps Pipeline Configuration
+
+1. **Create a YAML Pipeline**: In your Azure DevOps project, create a new pipeline using YAML.
+2. **Pipeline Configuration**: Below is a sample Azure DevOps pipeline YAML that executes Terraform code upon PR approval:
+
+```yaml
+trigger: none  # No CI trigger; only PR trigger will be used
+
+pr:
+  branches:
+    include:
+      - main  # Replace with your target branch
+
+jobs:
+- job: Terraform
+  displayName: 'Run Terraform on PR Approval'
+  pool:
+    vmImage: 'ubuntu-latest'
+
+  steps:
+  - checkout: self
+
+  - task: UseTerraform@0
+    inputs:
+      command: 'init'
+      workingDirectory: '$(System.DefaultWorkingDirectory)'  # Adjust if your Terraform files are in a subdirectory
+
+  - task: UseTerraform@0
+    inputs:
+      command: 'validate'
+      workingDirectory: '$(System.DefaultWorkingDirectory)'
+
+  - task: UseTerraform@0
+    inputs:
+      command: 'plan'
+      workingDirectory: '$(System.DefaultWorkingDirectory)'
+      environmentServiceName: 'your-service-connection-name'  # Replace with your service connection name
+      commandOptions: '-out=tfplan'
+
+  - task: UseTerraform@0
+    inputs:
+      command: 'apply'
+      workingDirectory: '$(System.DefaultWorkingDirectory)'
+      environmentServiceName: 'your-service-connection-name'  # Replace with your service connection name
+      commandOptions: '-auto-approve tfplan'
+      condition: eq(variables['Build.Reason'], 'PullRequest')  # Ensure it only runs on PRs
+```
+
+### Steps to Configure the Pipeline
+
+1. **Create a New Pipeline**:
+   - Navigate to your Azure DevOps project.
+   - Click on "Pipelines" and then "New Pipeline."
+   - Select your repository and choose "YAML" as the pipeline type.
+   - Copy and paste the YAML configuration above into the editor.
+
+2. **Adjust the YAML as Needed**:
+   - Update the `workingDirectory` if your Terraform files are located in a subfolder.
+   - Ensure the `environmentServiceName` matches the service connection created for Azure.
+
+3. **Save and Run the Pipeline**:
+   - Save the pipeline and create a Pull Request to the main branch.
+   - Ensure that the pipeline is set to run on PR approval by configuring branch policies under "Branches" in your project settings.
+
+4. **Configure Branch Policies**:
+   - Go to Repos > Branches.
+   - Find the main branch and click on the three dots > Branch policies.
+   - Enable "Require a minimum number of reviewers" and add any additional policies you might need, such as requiring the pipeline to pass before merging.
+
+5. **Test the Pipeline**:
+   - Create a new feature branch, make some changes to your Terraform code, and open a PR against your main branch.
+   - Once the PR is approved, the pipeline should trigger the Terraform code execution.
+
+### Security Considerations
+
+- **Environment Variables**: Use Azure DevOps secure pipeline variables to store sensitive information such as credentials or access tokens.
+- **Service Connection Permissions**: Ensure the service principal used in the service connection has the least privilege necessary to perform the required actions.
+- **Terraform State Management**: Consider using remote state storage, such as Azure Storage, to manage your Terraform state securely, preventing conflicts in a team environment.
+
+By following these steps and using the provided YAML configuration, you should have a secure Azure DevOps pipeline that runs Terraform code only on approved pull requests, adhering to best practices in CI/CD and DevOps automation.

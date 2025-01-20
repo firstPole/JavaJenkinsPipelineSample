@@ -1,0 +1,94 @@
+Creating an Azure DevOps pipeline to execute Terraform code upon approval of a pull request (PR) involves several steps, including setting up your Azure DevOps environment, configuring the pipeline, and ensuring that the necessary permissions and integrations are in place. Below is a detailed guide, along with the YAML code for the pipeline.
+
+### Prerequisites
+
+1. **Azure DevOps Account**: You need an active Azure DevOps account and a project created within it.
+
+2. **Terraform Installed**: Ensure that you have Terraform installed locally for initial testing.
+
+3. **Azure Subscription**: You need an active Azure subscription to provision resources.
+
+4. **Service Connection**: Create a service connection in Azure DevOps to allow the pipeline to authenticate with Azure. This is typically done using the Azure Resource Manager service connection.
+
+5. **Repository**: Your Terraform code should be in a repository in Azure DevOps.
+
+6. **Approvals and Checks**: Configure branch policies to require PR approvals.
+
+7. **Agent Pool**: Ensure you have an agent pool set up that includes agents capable of running Terraform.
+
+### Steps to Configure Azure DevOps Pipeline
+
+1. **Set Up Azure DevOps Service Connection**:
+   - Go to your Azure DevOps project.
+   - Navigate to **Project Settings** > **Service connections**.
+   - Click on **New service connection** and select **Azure Resource Manager**.
+   - Follow the prompts to create a service connection.
+
+2. **Configure Branch Policies**:
+   - Go to **Repos** > **Branches**.
+   - Click on the ellipsis (…) next to your branch (e.g., `main`) and select **Branch policies**.
+   - Enable **Require a minimum number of reviewers** and set the desired number of approvals.
+
+3. **Create the Pipeline YAML**:
+   - In your repository, create a file named `azure-pipelines.yml` with the following content:
+
+```yaml
+trigger: none  # Disable CI trigger for direct commits
+
+pr:
+  branches:
+    include:
+      - main  # Specify the branch for PR validation
+
+stages:
+  - stage: Terraform
+    displayName: 'Terraform Plan and Apply'
+    jobs:
+      - job: TerraformJob
+        displayName: 'Run Terraform'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - checkout: self
+          
+          - task: UseTerraform@0
+            inputs:
+              command: 'init'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/path/to/terraform/code'
+          
+          - task: UseTerraform@0
+            inputs:
+              command: 'plan'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/path/to/terraform/code'
+              args: '-out=tfplan'
+          
+          - task: UseTerraform@0
+            inputs:
+              command: 'apply'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/path/to/terraform/code'
+              args: 'tfplan'
+              condition: eq(variables['Build.Reason'], 'PullRequest')
+```
+
+### Explanation of the YAML Pipeline
+
+- **Trigger**: Set to `none` to prevent direct commits from triggering the pipeline. The pipeline will only run on PRs.
+- **PR Section**: Specifies that the pipeline should run for pull requests to the `main` branch.
+- **Stages and Jobs**: Defines a single stage with a job that runs the Terraform commands.
+- **UseTerraform Task**: This task is used to run Terraform commands (`init`, `plan`, and `apply`). Make sure you have the Azure DevOps Terraform extension installed.
+- **Working Directory**: Adjust the path to your Terraform code as necessary.
+- **Condition**: The apply command will only run if the reason for the build is a pull request.
+
+### Additional Security Considerations
+
+- **Secrets Management**: Use Azure Key Vault to manage sensitive data (like secrets, access tokens, etc.) and integrate it with Terraform.
+- **Vulnerability Scanning**: Consider integrating tools like `tfsec` or `Checkov` to scan the Terraform code for security vulnerabilities before applying changes.
+- **Logging and Monitoring**: Ensure you have logging and monitoring in place to track the execution of your pipeline and any changes made to your infrastructure.
+
+### Final Steps
+
+1. **Commit the YAML File**: Commit the `azure-pipelines.yml` file to your repository.
+2. **Create a Pull Request**: Create a PR to the `main` branch. After the required approvals are granted, the pipeline will trigger and execute the Terraform code.
+3. **Monitor Pipeline**: Monitor the execution of the pipeline in Azure DevOps and review the output for any errors or warnings.
+
+This setup allows you to manage your infrastructure as code securely while ensuring that changes are reviewed before being applied.

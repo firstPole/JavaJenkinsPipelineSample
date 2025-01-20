@@ -1,0 +1,98 @@
+To set up an Azure DevOps Pipeline that executes Terraform code upon the approval of a Pull Request (PR), you will need to follow a series of steps and ensure that you meet certain prerequisites. Below is a detailed guide, followed by a sample YAML configuration for the Azure DevOps Pipeline.
+
+### Prerequisites
+
+1. **Azure DevOps Account**: Ensure you have an Azure DevOps organization and project set up.
+2. **Terraform Installed**: Terraform should be installed and configured in your development environment for local testing.
+3. **Service Connection**: Set up a service connection in Azure DevOps for Azure. This connection will allow the pipeline to authenticate and deploy resources to Azure.
+4. **Terraform Code Repository**: Your Terraform configuration files should be stored in a Git repository within Azure DevOps.
+5. **Permissions**: Ensure that the necessary permissions are granted to the Azure DevOps pipeline to access the repository and manage resources in Azure.
+6. **Environment**: Set up an Azure environment (e.g., AKS) that you intend to manage with Terraform.
+7. **Approval Process**: Configure your branch policies in Azure DevOps to require PR approvals before merging.
+
+### Steps to Configure Azure DevOps Pipeline
+
+1. **Create the Azure DevOps Pipeline**:
+   - Navigate to your Azure DevOps project.
+   - Go to Pipelines > Pipelines.
+   - Click on “New Pipeline”.
+   - Choose “GitHub” or “Azure Repos Git” depending on where your Terraform code is hosted.
+
+2. **Select YAML Pipeline**: Choose to configure your pipeline using YAML.
+
+3. **Define the Pipeline YAML**: Below is an example of a YAML pipeline that executes Terraform code on PR approval.
+
+### Sample YAML Pipeline
+
+```yaml
+trigger:
+  branches:
+    exclude:
+      - '*'
+
+pr:
+  branches:
+    include:
+      - main
+
+stages:
+- stage: Terraform_Apply
+  displayName: 'Terraform Apply Stage'
+  jobs:
+  - job: TerraformJob
+    displayName: 'Run Terraform'
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - checkout: self
+
+    - task: TerraformInstaller@0
+      inputs:
+        terraformVersion: 'latest'
+    
+    - script: |
+        terraform init
+        terraform plan
+      displayName: 'Terraform Init and Plan'
+
+    - script: |
+        terraform apply -auto-approve
+      displayName: 'Terraform Apply'
+      condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/pull/$(System.PullRequest.PullRequestId)/merge'))
+
+    - script: |
+        echo "Terraform deployment completed successfully."
+      displayName: 'Deployment Success Message'
+
+    - task: AzureCLI@2
+      inputs:
+        azureSubscription: '<Your-Service-Connection>'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "Implement monitoring and logging solutions here."
+
+```
+
+### Explanation of the YAML Pipeline
+
+- **trigger**: This section prevents automatic triggers on any branch but allows PR triggers on the `main` branch.
+- **pr**: This specifies that the pipeline will be triggered when a PR is created against the `main` branch.
+- **stages**: Contains a single stage for applying the Terraform code.
+- **jobs**: Defines a job that runs Terraform commands.
+- **checkout**: Checks out the code from the repository.
+- **TerraformInstaller**: Installs Terraform.
+- **Terraform Init and Plan**: Initializes Terraform and creates an execution plan.
+- **Terraform Apply**: Applies the Terraform code. It only runs under the condition that the job is part of a PR.
+- **AzureCLI**: Placeholder for any necessary Azure CLI commands for monitoring and logging setup.
+
+### Additional Configuration
+
+- **Branch Policies**: Set up branch policies in Azure DevOps to ensure PRs require approvals before merging.
+- **Service Mesh and Monitoring**: Consider integrating with Azure Monitor and Azure Application Insights for monitoring. Use a service mesh like Istio for service communication management.
+- **Vulnerability Scanning**: Implement Azure Security Center or other security tools to scan your infrastructure for vulnerabilities.
+- **Logging Solutions**: Use Azure Log Analytics or other logging solutions to capture application logs.
+
+### Conclusion
+
+By following these steps and using the provided YAML configuration, you can successfully set up an Azure DevOps Pipeline that executes Terraform code only upon the approval of a PR. This setup ensures that your infrastructure is managed securely and efficiently, aligned with best practices in DevOps and cloud security.

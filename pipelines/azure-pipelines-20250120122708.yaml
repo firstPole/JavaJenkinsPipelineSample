@@ -1,0 +1,107 @@
+Creating an Azure DevOps Pipeline to execute Terraform code on the approval of a Pull Request (PR) involves several steps. Below, I've outlined the prerequisites, the pipeline YAML configuration, and detailed steps to set it up.
+
+### Prerequisites
+
+1. **Azure DevOps Account**: Ensure you have an Azure DevOps organization and a project created.
+2. **Service Connection**: Create a service connection for Azure Resource Manager (ARM) in Azure DevOps:
+   - Go to Project Settings -> Service connections -> New service connection.
+   - Select Azure Resource Manager and authenticate.
+3. **Terraform Installed**: Ensure that Terraform is installed on your local machine for local testing.
+4. **Storage Backend**: Set up a backend for Terraform state (e.g., Azure Blob Storage).
+5. **Repository**: Your Terraform code should be in a repository within Azure DevOps.
+6. **Branch Policies**: Set up branch policies on your main branch to require PR approval.
+
+### Pipeline Configuration
+
+Here's an example of an Azure DevOps pipeline YAML file that you can use. This pipeline will be triggered on PR approval.
+
+#### Example `azure-pipelines.yml`
+
+```yaml
+trigger: none  # Disable CI trigger, only PR triggers will be used
+
+pr:
+  branches:
+    include:
+      - main  # Adjust this to your main branch
+
+stages:
+- stage: Terraform
+  displayName: 'Terraform Deployment'
+  jobs:
+  - job: TerraformJob
+    displayName: 'Run Terraform'
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: TerraformInstaller@0
+      inputs:
+        terraformVersion: 'latest'  # Use the latest version of Terraform
+
+    - script: |
+        echo "##vso[task.setvariable variable=TF_VAR_client_id;isOutput=true]$(client_id)"
+        echo "##vso[task.setvariable variable=TF_VAR_client_secret;isOutput=true]$(client_secret)"
+        echo "##vso[task.setvariable variable=TF_VAR_tenant_id;isOutput=true]$(tenant_id)"
+        echo "##vso[task.setvariable variable=TF_VAR_subscription_id;isOutput=true]$(subscription_id)"
+      displayName: 'Set Terraform Variables'
+    
+    - checkout: self  # Checkout the code
+
+    - script: |
+        terraform init -backend-config="storage_account_name=$(storage_account_name)" \
+                       -backend-config="container_name=$(container_name)" \
+                       -backend-config="key=$(tfstate_file_name).tfstate"
+      displayName: 'Terraform Init'
+
+    - script: |
+        terraform plan -out=tfplan
+      displayName: 'Terraform Plan'
+
+    - script: |
+        terraform apply -auto-approve tfplan
+      displayName: 'Terraform Apply'
+      condition: and(succeeded(), eq(variables['Build.Reason'], 'PullRequest'))
+```
+
+### Steps to Configure the Pipeline
+
+1. **Create a New Pipeline**:
+   - Go to the Azure DevOps project.
+   - Navigate to Pipelines -> Pipelines and click on "New Pipeline".
+   - Select the repository that contains your Terraform code.
+
+2. **YAML Pipeline Configuration**:
+   - When prompted, choose "YAML" as the pipeline type.
+   - Paste the provided YAML code into the editor.
+   - Save the pipeline configuration.
+
+3. **Variables Setup**:
+   - Navigate to the pipeline settings.
+   - Under "Variables", create the following variables:
+     - `client_id`: Your Azure Service Principal client ID.
+     - `client_secret`: Your Azure Service Principal client secret.
+     - `tenant_id`: Your Azure tenant ID.
+     - `subscription_id`: Your Azure subscription ID.
+     - `storage_account_name`: Name of the Azure Storage account for the backend.
+     - `container_name`: Name of the container in the storage account.
+     - `tfstate_file_name`: Name for the Terraform state file.
+
+4. **Branch Policies**:
+   - Go to Repos -> Branches, find your main branch, and set branch policies:
+     - Require a minimum number of reviewers.
+     - Check for linked work items.
+     - Optional: Set up additional checks like build validation.
+
+5. **Testing**:
+   - Create a new branch for testing.
+   - Push changes and create a PR against the main branch.
+   - Once the PR is approved, the pipeline will trigger and execute Terraform commands.
+
+### Security Considerations
+
+- **Secrets Management**: Use Azure DevOps secret variables or Azure Key Vault to manage sensitive information like client secrets.
+- **Least Privilege**: Ensure that the Azure Service Principal used has the least privilege necessary to perform the Terraform operations.
+- **Vulnerability Scanning**: Integrate additional scanning tools for your Terraform code, such as `tfsec` or `checkov`, as part of the pipeline to identify security vulnerabilities.
+- **Infrastructure as Code (IaC)**: Regularly review and audit your Terraform code for best practices.
+
+By following these steps, you should have a fully functional Azure DevOps pipeline that executes Terraform code upon PR approval, adhering to best practices and security considerations.

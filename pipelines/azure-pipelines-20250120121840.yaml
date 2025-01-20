@@ -1,0 +1,94 @@
+Creating an Azure DevOps Pipeline that executes Terraform code upon approval of a Pull Request (PR) involves several steps. Below are the detailed steps, prerequisites, and a sample YAML pipeline configuration.
+
+### Prerequisites
+
+1. **Azure DevOps Organization**: You must have an Azure DevOps account and a project created.
+
+2. **Service Connection**: Create a service connection to your Azure subscription in Azure DevOps. This service connection is required for Terraform to deploy resources in Azure.
+
+3. **Terraform Code**: Ensure you have your Terraform configuration files (`*.tf`) in your repository.
+
+4. **Environment Setup**: Ensure that you have the necessary Azure resources and permissions to create and manage the resources defined in your Terraform code.
+
+5. **Approval Policy**: Set up branch policies on the target branch to require PR approvals.
+
+### Steps to Configure the Azure DevOps Pipeline
+
+1. **Create a New Pipeline**:
+    - Navigate to Pipelines in your Azure DevOps project.
+    - Click on "New Pipeline".
+    - Select the source repository containing your Terraform code.
+
+2. **Configure Your Pipeline YAML**:
+   Create a file named `azure-pipelines.yml` in the root of your repository with the following content:
+
+```yaml
+trigger: none
+
+pr:
+  branches:
+    include:
+      - main  # Change to your target branch
+
+jobs:
+- job: Terraform
+  displayName: 'Terraform Plan and Apply'
+  pool:
+    vmImage: 'ubuntu-latest'
+  
+  steps:
+  - checkout: self
+
+  - task: UseTerraform@0
+    inputs:
+      command: 'init'
+      workingDirectory: '$(System.DefaultWorkingDirectory)'  # Adjust path if needed
+
+  - task: UseTerraform@0
+    inputs:
+      command: 'plan'
+      workingDirectory: '$(System.DefaultWorkingDirectory)'  # Adjust path if needed
+      environmentServiceName: 'YourServiceConnectionName'  # Replace with your service connection name
+      args: '-out=tfplan'
+
+  - task: UseTerraform@0
+    inputs:
+      command: 'apply'
+      workingDirectory: '$(System.DefaultWorkingDirectory)'  # Adjust path if needed
+      environmentServiceName: 'YourServiceConnectionName'  # Replace with your service connection name
+      args: 'tfplan'
+      ensureBackend: true
+
+  - task: PublishPipelineArtifact@1
+    inputs:
+      artifactName: 'terraform-plan'
+      path: 'tfplan'
+```
+
+3. **Set up an Approval Process**:
+   - Go to your Azure DevOps project settings.
+   - Under "Repositories", navigate to "Branch policies" for the branch you want to protect (e.g., `main`).
+   - Enable "Require a minimum number of reviewers" and add reviewers who will approve the PR.
+   - Optionally, enable "Check for linked work items" and "Check for comment resolution" based on your requirements.
+
+### Explanation of the Pipeline
+
+- **Trigger**: We set `trigger: none` to prevent automatic runs on pushes. The `pr` section specifies that the pipeline triggers on PRs targeting the specified branches.
+  
+- **Jobs and Steps**:
+  - The job runs on an `ubuntu-latest` VM.
+  - The `checkout: self` step checks out the repository code.
+  - The `UseTerraform@0` tasks are used to initialize, plan, and apply the Terraform configuration. Ensure the `environmentServiceName` points to your configured Azure service connection.
+  - The `PublishPipelineArtifact@1` task publishes the Terraform plan as an artifact.
+
+### Security and Best Practices
+
+- **Service Connection**: Use a service principal with the least privileges required for the Terraform operations.
+  
+- **State Management**: Use a remote backend like Azure Storage for managing the Terraform state file securely.
+
+- **Secrets Management**: Store sensitive information (like Azure credentials) in Azure DevOps as secret variables or use Azure Key Vault.
+
+- **Vulnerability Scanning**: Consider integrating tools like `Checkov` or `tfsec` in your pipeline to scan your Terraform code for security vulnerabilities.
+
+By following these steps and recommendations, you will have a secure Azure DevOps pipeline that executes Terraform code upon approval of a Pull Request.

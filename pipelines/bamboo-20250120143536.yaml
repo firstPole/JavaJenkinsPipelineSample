@@ -1,0 +1,95 @@
+Creating a Bitbucket CI/CD pipeline for Terraform that includes checkout, linting, testing, planning, and an approval stage before applying changes is a great way to ensure a secure and well-structured deployment process. Below is an example of a Bitbucket `bitbucket-pipelines.yml` file that implements these stages.
+
+### Bitbucket Pipelines Configuration
+
+```yaml
+image: hashicorp/terraform:latest
+
+pipelines:
+  default:
+    - step:
+        name: Checkout Code
+        caches:
+          - terraform
+        script:
+          - echo "Checking out code..."
+  
+    - step:
+        name: Lint Terraform Code
+        caches:
+          - terraform
+        script:
+          - echo "Linting Terraform code..."
+          - apk add --no-cache terraform-docs
+          - terraform fmt -check
+          - terraform validate
+
+    - step:
+        name: Run Terraform Tests
+        caches:
+          - terraform
+        script:
+          - echo "Running Terraform tests..."
+          - apk add --no-cache terratest
+          - go test -v ./test/
+
+    - step:
+        name: Terraform Plan
+        caches:
+          - terraform
+        script:
+          - echo "Creating Terraform plan..."
+          - terraform init
+          - terraform plan -out=tfplan
+
+    - step:
+        name: Approval Step
+        trigger: manual
+        script:
+          - echo "Waiting for manual approval to apply changes..."
+
+    - step:
+        name: Apply Terraform Changes
+        deployment: production
+        script:
+          - echo "Applying Terraform changes..."
+          - terraform apply tfplan
+
+definitions:
+  caches:
+    terraform: ~/.terraform.d/plugin-cache
+```
+
+### Explanation of Each Step
+
+1. **Checkout Code**:
+   - This step checks out the repository's code. You can add additional commands if needed.
+
+2. **Lint Terraform Code**:
+   - Uses `terraform fmt -check` to check the formatting of Terraform files.
+   - Validates the Terraform code using `terraform validate`.
+
+3. **Run Terraform Tests**:
+   - This step is meant to run any tests you have set up using Terratest or similar frameworks. Adjust the `go test` command based on your testing framework.
+
+4. **Terraform Plan**:
+   - Initializes Terraform and creates a plan. The plan is saved to a file (`tfplan`) for later use.
+
+5. **Approval Step**:
+   - This is a manual approval step that requires someone to approve the deployment before proceeding. The `trigger: manual` directive indicates that this step will pause the pipeline until a user manually approves it.
+
+6. **Apply Terraform Changes**:
+   - This step applies the approved Terraform changes using the plan file created earlier.
+
+### Security Considerations
+
+- Ensure secrets and sensitive data are not hardcoded in the pipeline. Use Bitbucket environment variables for sensitive information like AWS credentials.
+- Regularly update the Terraform image to use the latest version and include security patches.
+- Implement role-based access control (RBAC) to restrict who can approve changes in the manual approval step.
+
+### Additional Features
+You may also consider integrating additional tools for:
+- **Vulnerability Scanning**: Integrate tools like `tfsec` or `checkov` in the linting stage to scan for vulnerabilities in your Terraform code.
+- **Configuration Management**: If using a configuration management tool like Ansible or Chef, consider adding steps to manage configurations alongside your Terraform code.
+
+Feel free to modify the pipeline according to your specific project structure and requirements!
